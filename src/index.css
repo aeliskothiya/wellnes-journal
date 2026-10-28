@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+:root {
+  --app-background: #f5f6f0;
+  --app-surface: #ffffff;
+  --app-header: #f5f6f0;
+  --app-footer: #f5f6f0;
+  --app-primary: #345c32;
+  --app-accent: #9cac54;
+  --app-success: #5b8c62;
+  --app-text: #24352b;
+  --app-text-on-primary: #ffffff;
+  --app-border: #e1e7dc;
+  --app-sidebar: #294638;
+  --app-sidebar-active: #dfe8c5;
+  --app-sidebar-text: #ffffff;
+  --app-danger: #b42318;
+  --app-danger-surface: #fef3f2;
+}
+
+[data-theme='dark'] {
+  --app-background: #18221c;
+  --app-surface: #243329;
+  --app-header: #18221c;
+  --app-footer: #18221c;
+  --app-primary: #a9c477;
+  --app-accent: #bdce78;
+  --app-success: #79a47f;
+  --app-text: #edf3e8;
+  --app-text-on-primary: #ffffff;
+  --app-border: #3b4c3d;
+  --app-sidebar: #294638;
+  --app-sidebar-active: #526b4d;
+  --app-sidebar-text: #ffffff;
+  --app-danger: #fda29b;
+  --app-danger-surface: #4a211e;
+}
+
+[data-palette='gimmer'][data-theme='light'] {
+  --app-background: #ededed;
+  --app-surface: #ffffff;
+  --app-header: #e6dfe4;
+  --app-footer: #e6dfe4;
+  --app-primary: #133250;
+  --app-accent: #80b5d7;
+  --app-success: #80b5d7;
+  --app-text: #133250;
+  --app-text-on-primary: #ffffff;
+  --app-border: #bcc7d9;
+  --app-sidebar: #133250;
+  --app-sidebar-active: #80b5d7;
+  --app-sidebar-text: #ffffff;
+  --app-danger: #9f1239;
+  --app-danger-surface: #fff1f2;
+}
+
+[data-palette='gimmer'][data-theme='dark'] {
+  --app-background: #102a43;
+  --app-surface: #1c4668;
+  --app-header: #133250;
+  --app-footer: #133250;
+  --app-primary: #80b5d7;
+  --app-accent: #bcc7d9;
+  --app-success: #80b5d7;
+  --app-text: #ededed;
+  --app-text-on-primary: #102a43;
+  --app-border: #557a9b;
+  --app-sidebar: #0b2035;
+  --app-sidebar-active: #80b5d7;
+  --app-sidebar-text: #ffffff;
+  --app-danger: #fda4af;
+  --app-danger-surface: #52202c;
+}
+
+[data-palette='alabaster'][data-theme='light'] {
+  --app-background: #f7f1e7;
+  --app-surface: #fffaf2;
+  --app-header: #e7d0aa;
+  --app-footer: #e7d0aa;
+  --app-primary: #65501c;
+  --app-accent: #b49557;
+  --app-success: #7b6c3c;
+  --app-text: #3e321c;
+  --app-text-on-primary: #ffffff;
+  --app-border: #e7d0aa;
+  --app-sidebar: #65501c;
+  --app-sidebar-active: #e7d0aa;
+  --app-sidebar-text: #ffffff;
+  --app-danger: #a33b2e;
+  --app-danger-surface: #fff1ed;
+}
+
+[data-palette='alabaster'][data-theme='dark'] {
+  --app-background: #2c2415;
+  --app-surface: #40351f;
+  --app-header: #332914;
+  --app-footer: #332914;
+  --app-primary: #e7d0aa;
+  --app-accent: #9ccbd3;
+  --app-success: #b49557;
+  --app-text: #f7f1e7;
+  --app-text-on-primary: #2c2415;
+  --app-border: #6f5c34;
+  --app-sidebar: #211a0d;
+  --app-sidebar-active: #7b6c3c;
+  --app-sidebar-text: #ffffff;
+  --app-danger: #ffb4a8;
+  --app-danger-surface: #55251f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: var(--app-background);
+  color: var(--app-text);
+  font-family: Arial, sans-serif;
+}
+
+[data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator,
+[data-theme='dark'] input[type='time']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.9;
+}
+
+[data-theme='dark'] input[type='date'],
+[data-theme='dark'] input[type='time'] {
+  color-scheme: dark;
+}

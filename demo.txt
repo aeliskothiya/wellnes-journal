@@ -1,0 +1,744 @@
+
+import { useEffect, useRef, useState } from "react";
+import {
+  Save, Plus, Search, Pencil, Trash2, BookOpen,
+  Bold, Italic, Underline, List, ListOrdered,
+  Quote, Undo2, Redo2, X, Check, FileText,
+} from "lucide-react";
+
+type Mood = {
+  label: string;
+  emoji: string;
+  color: string;
+};
+
+type Journal = {
+  id: string;
+  title: string;
+  content: string;
+  mood: string;
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+};
+
+const STORAGE_KEY = "mindful-journal-entries";
+const EXPIRY_TIME = 48 * 60 * 60 * 1000;
+
+const moods: Mood[] = [
+  { label: "Happy", emoji: "😊", color: "bg-yellow-100" },
+  { label: "Excited", emoji: "😁", color: "bg-orange-100" },
+  { label: "Calm", emoji: "😌", color: "bg-green-100" },
+  { label: "Okay", emoji: "😐", color: "bg-blue-100" },
+  { label: "Thoughtful", emoji: "😔", color: "bg-indigo-100" },
+  { label: "Sad", emoji: "😢", color: "bg-sky-100" },
+  { label: "Anxious", emoji: "😰", color: "bg-purple-100" },
+  { label: "Worried", emoji: "😨", color: "bg-amber-100" },
+  { label: "Angry", emoji: "😫", color: "bg-red-100" },
+];
+
+const suggestions = [
+  "Mindfulness",
+  "Gratitude",
+  "Self-Care",
+  "Reflection",
+  "Work",
+  "Growth",
+  "Peace",
+];
+
+function cleanHTML(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+
+  const allowedTags = new Set([
+    "P", "BR", "B", "STRONG", "I", "EM", "U",
+    "UL", "OL", "LI", "BLOCKQUOTE",
+  ]);
+
+  function cleanNode(node: Node): void {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const el = child as HTMLElement;
+
+        if (!allowedTags.has(el.tagName)) {
+          const text = doc.createTextNode(el.textContent ?? "");
+          el.replaceWith(text);
+          continue;
+        }
+
+        Array.from(el.attributes).forEach((attr) => {
+          el.removeAttribute(attr.name);
+        });
+
+        cleanNode(el);
+      } else if (
+        child.nodeType !== Node.TEXT_NODE
+      ) {
+        child.remove();
+      }
+    }
+  }
+
+  cleanNode(doc.body);
+  return doc.body.innerHTML;
+}
+
+function plainText(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.body.textContent ?? "";
+}
+
+function readJournals(): Journal[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    const now = Date.now();
+
+    return parsed.filter((item): item is Journal => {
+      if (
+        !item ||
+        typeof item.id !== "string" ||
+        typeof item.title !== "string" ||
+        typeof item.content !== "string" ||
+        typeof item.createdAt !== "number" ||
+        typeof item.updatedAt !== "number" ||
+        !Array.isArray(item.tags) ||
+        !item.tags.every((tag: unknown) => typeof tag === "string") ||
+        typeof item.mood !== "string"
+      ) {
+        return false;
+      }
+
+      return (
+        item.createdAt <= now &&
+        now - item.createdAt < EXPIRY_TIME
+      );
+    });
+  } catch {
+    return [];
+  }
+}
+
+function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export default function JournalEntry() {
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  const [entries, setEntries] = useState<Journal[]>(readJournals);
+  const [title, setTitle] = useState("");
+  const [mood, setMood] = useState("Happy");
+  const [tags, setTags] = useState<string[]>([]);
+  const [customTag, setCustomTag] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [view, setView] = useState<"write" | "all">("write");
+  const [search, setSearch] = useState("");
+  const [moodFilter, setMoodFilter] = useState("All");
+  const [tagFilter, setTagFilter] = useState("All");
+  const [notice, setNotice] = useState("");
+
+  // Persist entries and automatically discard expired journals.
+  useEffect(() => {
+    const valid = entries.filter(
+      (entry) =>
+        entry.createdAt <= Date.now() &&
+        Date.now() - entry.createdAt < EXPIRY_TIME
+    );
+
+    if (valid.length !== entries.length) {
+      setEntries(valid);
+      return;
+    }
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    } catch {
+      setNotice("Unable to save. Browser storage may be full.");
+    }
+  }, [entries]);
+
+  function runCommand(command: string, value?: string) {
+    editorRef.current?.focus();
+    document.execCommand(command, false, value);
+  }
+
+  function resetEditor() {
+    setTitle("");
+    setMood("Happy");
+    setTags([]);
+    setCustomTag("");
+    setEditingId(null);
+
+    if (editorRef.current) {
+      editorRef.current.innerHTML = "";
+    }
+  }
+
+  function startNewEntry() {
+    resetEditor();
+    setView("write");
+    setNotice("");
+  }
+
+  function editEntry(entry: Journal) {
+    setTitle(entry.title);
+    setMood(entry.mood);
+    setTags([...entry.tags]);
+    setEditingId(entry.id);
+    setView("write");
+
+    if (editorRef.current) {
+      editorRef.current.innerHTML = cleanHTML(entry.content);
+    }
+  }
+
+  function toggleTag(tag: string) {
+    setTags((current) =>
+      current.includes(tag)
+        ? current.filter((item) => item !== tag)
+        : [...current, tag]
+    );
+  }
+
+  function addCustomTag() {
+    const tag = customTag.trim().replace(/^#+/, "");
+    if (!tag) return;
+
+    setTags((current) =>
+      current.some((item) => item.toLowerCase() === tag.toLowerCase())
+        ? current
+        : [...current, tag]
+    );
+    setCustomTag("");
+  }
+
+  function saveEntry() {
+    const content = cleanHTML(editorRef.current?.innerHTML ?? "");
+    const text = plainText(content).trim();
+    const cleanTitle = title.trim();
+
+    if (!cleanTitle) {
+      setNotice("Please enter a journal title.");
+      return;
+    }
+
+    if (!text) {
+      setNotice("Please write something in your journal.");
+      return;
+    }
+
+    const now = Date.now();
+
+    if (editingId) {
+      setEntries((current) =>
+        current.map((entry) =>
+          entry.id === editingId
+            ? {
+                ...entry,
+                title: cleanTitle,
+                content,
+                mood,
+                tags: [...tags],
+                updatedAt: now,
+              }
+            : entry
+        )
+      );
+      setNotice("Journal updated successfully!");
+    } else {
+      const entry: Journal = {
+        id: crypto.randomUUID(),
+        title: cleanTitle,
+        content,
+        mood,
+        tags: [...tags],
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      setEntries((current) => [entry, ...current]);
+      setNotice("Journal saved successfully!");
+    }
+
+    resetEditor();
+  }
+
+  function deleteEntry(id: string) {
+    if (!window.confirm("Delete this journal entry?")) return;
+
+    setEntries((current) => current.filter((entry) => entry.id !== id));
+
+    if (editingId === id) resetEditor();
+    setNotice("Journal deleted.");
+  }
+
+  const filteredEntries = entries.filter((entry) => {
+    const query = search.trim().toLowerCase();
+
+    const matchesSearch =
+      entry.title.toLowerCase().includes(query) ||
+      entry.tags.some((tag) => tag.toLowerCase().includes(query));
+
+    const matchesMood =
+      moodFilter === "All" || entry.mood === moodFilter;
+
+    const matchesTag =
+      tagFilter === "All" || entry.tags.includes(tagFilter);
+
+    return matchesSearch && matchesMood && matchesTag;
+  });
+
+  const selectedMood = moods.find((item) => item.label === mood);
+
+  const inputClass =
+    "w-full rounded-xl border border-(--app-border) bg-(--app-background) px-3 py-2.5 text-sm text-(--app-text) outline-none focus:border-(--app-primary)";
+
+  const panelClass =
+    "rounded-2xl border border-(--app-border) bg-(--app-surface) p-5 shadow-sm sm:p-6";
+
+  return (
+    <div className="w-full space-y-5 text-(--app-text)">
+      {/* Header */}
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-(--app-border) pb-4">
+        <div>
+          <h1 className="text-2xl font-bold">Mindful Journal</h1>
+          <p className="text-sm opacity-70">
+            A quiet space for your thoughts and feelings
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setView("write")}
+            className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${
+              view === "write"
+                ? "bg-(--app-primary) text-white"
+                : "border-(--app-border)"
+            }`}
+          >
+            <FileText size={16} /> Write
+          </button>
+
+          <button
+            onClick={() => setView("all")}
+            className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${
+              view === "all"
+                ? "bg-(--app-primary) text-white"
+                : "border-(--app-border)"
+            }`}
+          >
+            <BookOpen size={16} /> All Entries ({entries.length})
+          </button>
+
+          <button
+            onClick={startNewEntry}
+            className="flex items-center gap-2 rounded-xl bg-(--app-primary) px-4 py-2 text-sm font-semibold text-white"
+          >
+            <Plus size={17} /> New
+          </button>
+        </div>
+      </header>
+
+
+        {notice && (
+        <div
+            role="status"
+            aria-live="polite"
+            className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-sm ${
+            notice.toLowerCase().includes("successfully")
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : notice.toLowerCase().includes("unable") ||
+                    notice.toLowerCase().includes("error")
+                ? "border-rose-200 bg-rose-50 text-rose-800"
+                : "border-amber-200 bg-amber-50 text-amber-800"
+            }`}
+        >
+            <span className="flex items-center gap-2">
+            <span aria-hidden="true">
+                {notice.toLowerCase().includes("successfully")
+                ? "✓"
+                : notice.toLowerCase().includes("unable") ||
+                    notice.toLowerCase().includes("error")
+                    ? "!"
+                    : "⚠"}
+            </span>
+            {notice}
+            </span>
+
+            <button
+            type="button"
+            onClick={() => setNotice("")}
+            aria-label="Dismiss notification"
+            className="shrink-0 rounded-md p-1 opacity-70 transition hover:bg-black/5 hover:opacity-100"
+            >
+            <X size={16} />
+            </button>
+        </div>
+        )}
+
+
+
+      {/* Write view */}
+      {view === "write" && (
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
+          <section className={panelClass}>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm opacity-60">
+                  {editingId ? "Editing journal" : "Create a new entry"}
+                </p>
+                <p className="text-xs opacity-60">
+                  {new Date().toLocaleDateString("en-IN", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+              </div>
+
+              <button
+                onClick={saveEntry}
+                className="flex items-center gap-2 rounded-xl bg-(--app-primary) px-4 py-2.5 text-sm font-semibold text-white"
+              >
+                <Save size={16} />
+                {editingId ? "Update entry" : "Save entry"}
+              </button>
+            </div>
+
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Title of your reflection..."
+              aria-label="Journal title"
+              maxLength={200}
+              className="mb-5 w-full border-b border-(--app-border) bg-transparent pb-4 text-2xl font-bold outline-none placeholder:opacity-50 focus:border-(--app-primary)"
+            />
+
+            {/* Compact rich-text toolbar */}
+            <div className="flex flex-wrap gap-1.5 rounded-t-xl border border-(--app-border) bg-(--app-background) p-2">
+              <button type="button" title="Bold" onClick={() => runCommand("bold")} className="rounded-lg border border-(--app-border) p-2 hover:bg-(--app-surface)">
+                <Bold size={17} />
+              </button>
+              <button type="button" title="Italic" onClick={() => runCommand("italic")} className="rounded-lg border border-(--app-border) p-2 hover:bg-(--app-surface)">
+                <Italic size={17} />
+              </button>
+              <button type="button" title="Underline" onClick={() => runCommand("underline")} className="rounded-lg border border-(--app-border) p-2 hover:bg-(--app-surface)">
+                <Underline size={17} />
+              </button>
+              <span className="mx-1 border-l border-(--app-border)" />
+              <button type="button" title="Bulleted list" onClick={() => runCommand("insertUnorderedList")} className="rounded-lg border border-(--app-border) p-2 hover:bg-(--app-surface)">
+                <List size={17} />
+              </button>
+              <button type="button" title="Numbered list" onClick={() => runCommand("insertOrderedList")} className="rounded-lg border border-(--app-border) p-2 hover:bg-(--app-surface)">
+                <ListOrdered size={17} />
+              </button>
+              <button type="button" title="Quote" onClick={() => runCommand("formatBlock", "blockquote")} className="rounded-lg border border-(--app-border) p-2 hover:bg-(--app-surface)">
+                <Quote size={17} />
+              </button>
+              <span className="mx-1 border-l border-(--app-border)" />
+              <button type="button" title="Undo" onClick={() => runCommand("undo")} className="rounded-lg border border-(--app-border) p-2 hover:bg-(--app-surface)">
+                <Undo2 size={17} />
+              </button>
+              <button type="button" title="Redo" onClick={() => runCommand("redo")} className="rounded-lg border border-(--app-border) p-2 hover:bg-(--app-surface)">
+                <Redo2 size={17} />
+              </button>
+              <button type="button" title="Clear formatting" onClick={() => runCommand("removeFormat")} className="rounded-lg border border-(--app-border) px-3 py-2 text-xs font-medium hover:bg-(--app-surface)">
+                Clear formatting
+              </button>
+            </div>
+
+            <div
+              ref={editorRef}
+              contentEditable
+              suppressContentEditableWarning
+              role="textbox"
+              aria-label="Journal content"
+              aria-multiline="true"
+              data-placeholder="What's on your mind today? Write freely without judgment..."
+              onPaste={(event) => {
+                event.preventDefault();
+                const text = event.clipboardData.getData("text/plain");
+                document.execCommand("insertText", false, text);
+              }}
+              className="min-h-72 rounded-b-xl border border-t-0 border-(--app-border) bg-(--app-surface) p-4 text-sm leading-7 outline-none focus:border-(--app-primary) sm:min-h-96 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_blockquote]:border-l-4 [&_blockquote]:border-(--app-primary) [&_blockquote]:pl-4 [&_blockquote]:italic"
+            />
+
+            <style>{`
+              [contenteditable][data-placeholder]:empty::before {
+                content: attr(data-placeholder);
+                color: #94a3b8;
+                pointer-events: none;
+              }
+            `}</style>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-(--app-border) pt-3 text-xs opacity-70">
+              <span>
+                {plainText(editorRef.current?.innerHTML ?? "")
+                  .trim()
+                  .split(/\s+/)
+                  .filter(Boolean).length} words
+                {" · "}
+                {plainText(editorRef.current?.innerHTML ?? "").length} characters
+              </span>
+
+              {editingId && (
+                <button
+                  onClick={startNewEntry}
+                  className="flex items-center gap-1 font-medium"
+                >
+                  <X size={14} /> Cancel editing
+                </button>
+              )}
+            </div>
+          </section>
+
+          {/* Mood and tags sidebar */}
+          <aside className="space-y-5">
+            <section className={panelClass}>
+              <h2 className="mb-4 font-semibold">
+                How are you feeling?
+              </h2>
+
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-3">
+                {moods.map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={() => setMood(item.label)}
+                    aria-pressed={mood === item.label}
+                    title={item.label}
+                    className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition ${
+                      mood === item.label
+                        ? "border-(--app-primary) ring-2 ring-(--app-primary)"
+                        : "border-(--app-border) hover:bg-(--app-background)"
+                    }`}
+                  >
+                    <span className={`flex size-10 items-center justify-center rounded-full text-2xl ${item.color}`}>
+                      {item.emoji}
+                    </span>
+                    <span className="text-xs">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className={panelClass}>
+              <h2 className="mb-3 font-semibold">Tags</h2>
+
+              <form
+                className="mb-4 flex gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  addCustomTag();
+                }}
+              >
+                <input
+                  value={customTag}
+                  onChange={(event) => setCustomTag(event.target.value)}
+                  placeholder="Add a tag..."
+                  maxLength={40}
+                  aria-label="Custom tag"
+                  className={inputClass}
+                />
+                <button
+                  type="submit"
+                  aria-label="Add tag"
+                  className="rounded-xl bg-(--app-primary) px-3 text-white"
+                >
+                  <Plus size={18} />
+                </button>
+              </form>
+
+              <p className="mb-2 text-xs opacity-60">Suggestions</p>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.map((tag) => {
+                  const selected = tags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => toggleTag(tag)}
+                      aria-pressed={selected}
+                      className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                        selected
+                          ? "border-(--app-primary) bg-(--app-primary) text-white"
+                          : "border-(--app-border) hover:bg-(--app-background)"
+                      }`}
+                    >
+                      {selected ? <Check size={12} className="mr-1 inline" /> : <Plus size={12} className="mr-1 inline" />}
+                      {tag}
+                    </button>
+                  );
+                })}
+
+                {tags.filter((tag) => !suggestions.includes(tag)).map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                    className="rounded-full border border-(--app-primary) bg-(--app-background) px-3 py-1.5 text-xs"
+                  >
+                    {tag} <X size={12} className="ml-1 inline" />
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <p className="px-1 text-xs opacity-60">
+              {selectedMood?.emoji} Feeling {mood.toLowerCase()}
+              {" · "}
+              {tags.length} {tags.length === 1 ? "tag" : "tags"} selected
+            </p>
+          </aside>
+        </div>
+      )}
+
+      {/* All entries view */}
+      {view === "all" && (
+        <section className={panelClass}>
+          <div className="mb-5">
+            <h2 className="text-xl font-bold">All journal entries</h2>
+            <p className="mt-1 text-sm opacity-60">
+              Find a moment, feeling, or thought from your journal.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="relative sm:col-span-1">
+              <Search size={17} className="absolute left-3 top-3 opacity-50" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search title or tag..."
+                className={`${inputClass} pl-9`}
+              />
+            </div>
+
+            <select
+              value={moodFilter}
+              onChange={(event) => setMoodFilter(event.target.value)}
+              aria-label="Filter by mood"
+              className={inputClass}
+            >
+              <option value="All">All moods</option>
+              {moods.map((item) => (
+                <option key={item.label} value={item.label}>
+                  {item.emoji} {item.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={tagFilter}
+              onChange={(event) => setTagFilter(event.target.value)}
+              aria-label="Filter by tag"
+              className={inputClass}
+            >
+              <option value="All">All tags</option>
+              {[...new Set(entries.flatMap((entry) => entry.tags))]
+                .sort()
+                .map((tag) => (
+                  <option key={tag} value={tag}>{tag}</option>
+                ))}
+            </select>
+          </div>
+
+          <p className="my-4 text-sm opacity-60">
+            {filteredEntries.length} entries found
+          </p>
+
+          {filteredEntries.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-(--app-border) px-4 py-12 text-center">
+              <BookOpen size={36} className="mx-auto mb-3 opacity-40" />
+              <p className="font-semibold">No journal entries found</p>
+              <p className="mt-1 text-sm opacity-60">
+                Try a different search or create a new entry.
+              </p>
+              <button
+                onClick={startNewEntry}
+                className="mt-4 rounded-xl bg-(--app-primary) px-4 py-2 text-sm font-semibold text-white"
+              >
+                Write a journal
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {filteredEntries.map((entry) => {
+                const entryMood = moods.find(
+                  (item) => item.label === entry.mood
+                );
+
+                return (
+                  <article
+                    key={entry.id}
+                    className="min-w-0 rounded-xl border border-(--app-border) p-4 transition hover:shadow-md"
+                  >
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="break-words font-bold">
+                          {entry.title}
+                        </h3>
+                        <p className="mt-1 text-xs opacity-60">
+                          {formatDate(entry.createdAt)}
+                          {entry.updatedAt !== entry.createdAt && " · Edited"}
+                        </p>
+                      </div>
+
+                      <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${entryMood?.color ?? "bg-gray-100"}`}>
+                        {entryMood?.emoji} {entry.mood}
+                      </span>
+                    </div>
+
+                    <div
+                      className="mb-4 line-clamp-4 break-words text-sm leading-6 opacity-80 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                      dangerouslySetInnerHTML={{
+                        __html: cleanHTML(entry.content),
+                      }}
+                    />
+
+                    <div className="mb-4 flex flex-wrap gap-1.5">
+                      {entry.tags.map((tag) => (
+                        <button
+                          key={tag}
+                          onClick={() => {
+                            setTagFilter(tag);
+                          }}
+                          className="rounded-full bg-(--app-background) px-2.5 py-1 text-xs"
+                        >
+                          #{tag}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-end gap-2 border-t border-(--app-border) pt-3">
+                      <button
+                        onClick={() => editEntry(entry)}
+                        className="flex items-center gap-1.5 rounded-lg border border-(--app-border) px-3 py-2 text-sm hover:bg-(--app-background)"
+                      >
+                        <Pencil size={14} /> Edit
+                      </button>
+                      <button
+                        onClick={() => deleteEntry(entry.id)}
+                        aria-label={`Delete ${entry.title}`}
+                        className="rounded-lg border border-(--app-border) p-2 text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
