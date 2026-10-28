@@ -231,6 +231,18 @@ export default function Analytics() {
     pointLabel: `${formatDate(point.dateKey, { month: "short", day: "numeric" })} ${getEntryTime(point.entry)}`,
     score: point.score,
   }));
+  const averageMoodScore =
+    graphData.length > 0
+      ? graphData.reduce((sum, point) => sum + point.score, 0) /
+        graphData.length
+      : null;
+  const averageMoodEmoji =
+    averageMoodScore === null
+      ? ""
+      : ({ 1: "😰", 2: "😢", 3: "😐", 4: "😁", 5: "😊" } as Record<
+          number,
+          string
+        >)[Math.max(1, Math.min(5, Math.round(averageMoodScore)))];
 
   const selectDate = (dateKey: string) => {
     if (isFutureDate(dateKey)) return;
@@ -594,6 +606,18 @@ export default function Analytics() {
               </div>
             )}
           </section>
+            <section className="rounded-2xl bg-(--app-surface) p-4 shadow-sm sm:p-6">
+                <div className="flex items-center justify-center">
+                  <p className="text-sm text-(--app-primary)">
+                    Your average mood for these entries
+                  </p>
+                  <span className="ml-2 rounded-full bg-(--app-sidebar-active) px-3 py-1 text-xs font-semibold">
+                    {averageMoodScore === null
+                      ? "No entries"
+                      : `${averageMoodScore.toFixed(1)} ${averageMoodEmoji}`}
+                  </span>
+                </div>
+            </section>
 
           <section className="rounded-2xl bg-(--app-surface) p-4 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -651,6 +675,7 @@ export default function Analytics() {
                       <p className="mt-3 whitespace-pre-wrap text-sm leading-6">
                         {entry.note}
                       </p>
+
                     )}
                   </article>
                 ))
